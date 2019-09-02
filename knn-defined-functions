@@ -1,0 +1,174 @@
+import numpy as np
+from scipy.stats import mode
+import sys
+%matplotlib notebook
+import matplotlib
+import matplotlib.pyplot as plt
+from scipy.io import loadmat
+import time
+sys.path.append('/home/codio/workspace/.guides/hf')
+from helper import *
+
+print('You\'re running python %s' % sys.version.split(' ')[0])
+
+
+#### Euclidean Distance ####
+def l2distance(X,Z=None):
+    # function D=l2distance(X,Z)
+    #
+    # Computes the Euclidean distance matrix.
+    # Syntax:
+    # D=l2distance(X,Z)
+    # Input:
+    # X: nxd data matrix with n vectors (rows) of dimensionality d
+    # Z: mxd data matrix with m vectors (rows) of dimensionality d
+    #
+    # Output:
+    # Matrix D of size nxm
+    # D(i,j) is the Euclidean distance of X(i,:) and Z(j,:)
+    #
+    # call with only one input:
+    # l2distance(X)=l2distance(X,X)
+    #
+    if Z is None:
+        Z=X;
+
+    n,d1=X.shape
+    m,d2=Z.shape
+    assert (d1==d2), "Dimensions of input vectors must match!"
+
+    S = np.sum(np.square(X), axis = 1)
+    S = np.expand_dims(S, axis = 1)
+    R = np.sum(np.square(Z), axis = 1)
+    R = np.expand_dims(R, axis = 0)
+    G = 2*np.dot(X,Z.T)
+    
+    D = S + R - G
+    D[D<0]=0
+    D = np.sqrt(D)
+
+    return D
+    
+    
+ ### Visualize Data ###
+ xTr,yTr,xTe,yTe=loaddata("faces.mat")
+
+ plt.figure(figsize=(11,8))
+ plotfaces(xTr[:9, :])
+
+#### Find Indices and Distance of KNN ####
+def findknn(xTr,xTe,k):
+    """
+    function [indices,dists]=findknn(xTr,xTe,k);
+    
+    Finds the k nearest neighbors of xTe in xTr.
+    
+    Input:
+    xTr = nxd input matrix with n row-vectors of dimensionality d
+    xTe = mxd input matrix with m row-vectors of dimensionality d
+    k = number of nearest neighbors to be found
+    
+    Output:
+    indices = kxm matrix, where indices(i,j) is the i^th nearest neighbor of xTe(j,:)
+    dists = Euclidean distances to the respective nearest neighbors
+    """
+    
+    # Create Distance Function
+    D = l2distance(xTr,xTe)
+    # Sort along the xTr axis and return the indices of closest distances
+    ind = np.argsort(D, axis = 0)
+    # Sort along the same axis to return the actual distances
+    dist = np.sort(D,axis = 0)
+    # Find K NN of ind and dist
+    ind = ind[:k,:]
+    dist = dist[:k,:]
+    
+    return ind,dist
+    
+### Visualize Results ###
+%matplotlib notebook
+visualize_knn_2D(findknn)
+
+%matplotlib notebook
+visualize_knn_images(findknn, imageType='faces')
+
+#### Function to Determine Accuracy ####
+def accuracy(truth,preds):
+    """
+    function output=accuracy(truth,preds)         
+    Analyzes the accuracy of a prediction against the ground truth
+    
+    Input:
+    truth = n-dimensional vector of true class labels
+    preds = n-dimensional vector of predictions
+    
+    Output:
+    accuracy = scalar (percent of predictions that are correct)
+    """
+    
+    truth = truth.flatten()
+    preds = preds.flatten()
+
+    dif = preds - truth
+    dif[dif != 0] = 1
+    total = np.prod(dif.shape)
+    correct = total - np.sum(dif)
+
+    accuracy = np.divide(correct,total)
+    return accuracy
+    
+    
+#### Function to Predict the Labels Based on "Mode" of Nearest Neighbors ####
+def knnclassifier(xTr,yTr,xTe,k):
+    """
+    function preds=knnclassifier(xTr,yTr,xTe,k);
+    
+    k-nn classifier 
+    
+    Input:
+    xTr = nxd input matrix with n row-vectors of dimensionality d
+    xTe = mxd input matrix with m row-vectors of dimensionality d
+    k = number of nearest neighbors to be found
+    
+    Output:
+    
+    preds = predicted labels, ie preds(i) is the predicted label of xTe(i,:)
+    """
+    # fix array shapes
+    yTr = yTr.flatten()
+    
+    # import mode
+    from scipy import stats
+    
+    # Get indices and distance matrix
+    ind,dist = findknn(xTr, xTe, k)
+    
+    # pass indices to output labels
+    label = yTr[ind]
+    print(label.shape)
+    print("label", label)
+
+    pred, count = stats.mode(label, axis = 0)
+    print(pred.shape)
+    print("pred", pred.flatten())
+    #pred should be an array 
+    
+    
+    return pred
+    
+    
+### Calculate Accuracy ###
+print("Face Recognition: (1-nn)")
+xTr,yTr,xTe,yTe=loaddata("faces.mat") # load the data
+t0 = time.time()
+preds = knnclassifier(xTr,yTr,xTe,1)
+result=accuracy(yTe,preds)
+t1 = time.time()
+print("You obtained %.2f%% classification acccuracy in %.4f seconds\n" % (result*100.0,t1-t0))
+
+
+### Visualize Boundry ###
+%matplotlib notebook
+visualize_knn_boundary(knnclassifier)
+
+
